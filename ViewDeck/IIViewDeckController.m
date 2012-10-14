@@ -356,6 +356,9 @@ inline IIViewDeckOffsetOrientation IIViewDeckOffsetOrientationFromIIViewDeckSide
 
 
 - (void)cleanup {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [[UIApplication sharedApplication] removeObserver:self forKeyPath:@"statusBarHidden"];
+
     self.originalShadowRadius = 0;
     self.originalShadowOpacity = 0;
     self.originalShadowColor = nil;
@@ -410,16 +413,23 @@ inline IIViewDeckOffsetOrientation IIViewDeckOffsetOrientationFromIIViewDeckSide
 }
 
 - (CGFloat)relativeStatusBarHeight {
-    if (![self.referenceView isKindOfClass:[UIWindow class]]) 
-        return 0;
+  if (![self.referenceView isKindOfClass:[UIWindow class]] && !self.wantsFullScreenLayout)
+      return 0;
     
     return [self statusBarHeight];
 }
 
 - (CGFloat)statusBarHeight {
-    return UIInterfaceOrientationIsLandscape([UIApplication sharedApplication].statusBarOrientation) 
+    return UIInterfaceOrientationIsLandscape([UIApplication sharedApplication].statusBarOrientation)
     ? [UIApplication sharedApplication].statusBarFrame.size.width 
     : [UIApplication sharedApplication].statusBarFrame.size.height;
+}
+
+- (void)statusBarChangedNotification:(NSNotification*)notification{
+  self.centerController.view.frame = self.centerView.bounds;
+  [self doForControllers:^(UIViewController* controller, IIViewDeckSide side) {
+    controller.view.frame = self.sideViewBounds;
+  }];
 }
 
 - (CGRect)centerViewBounds {
@@ -732,7 +742,8 @@ inline IIViewDeckOffsetOrientation IIViewDeckOffsetOrientationFromIIViewDeckSide
     [super viewWillAppear:animated];
     
     [self.view addObserver:self forKeyPath:@"bounds" options:NSKeyValueChangeSetting context:nil];
-
+    [[UIApplication sharedApplication] addObserver:self forKeyPath:@"statusBarHidden" options:NSKeyValueChangeSetting context:nil];
+  
     if (!_viewFirstAppeared) {
         _viewFirstAppeared = YES;
         
@@ -777,6 +788,12 @@ inline IIViewDeckOffsetOrientation IIViewDeckOffsetOrientationFromIIViewDeckSide
             [self centerViewVisible];
         else
             [self centerViewHidden];
+      
+      [[NSNotificationCenter defaultCenter]
+       addObserver:self
+       selector:@selector(statusBarChangedNotification:)
+       name:UIApplicationDidChangeStatusBarFrameNotification
+       object:nil];
     }
     
     [self.centerController viewWillAppear:animated];
@@ -2481,6 +2498,10 @@ inline IIViewDeckOffsetOrientation IIViewDeckOffsetOrientationFromIIViewDeckSide
         }
         return;
     }
+  
+  if ([keyPath isEqualToString:@"statusBarHidden"]) {
+    [self statusBarChangedNotification:nil];
+  }
 }
 
 #pragma mark - Shadow
